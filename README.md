@@ -5,6 +5,12 @@ A conversational shopping assistant that helps customers find and compare produc
 ## Aisle UI
 ![Demo](media/demo.png)
 
+## System Architecture Diagram
+
+The diagram below shows the agent workflow: user input, conversation context, tool selection, product and FAQ retrieval, order lookup, and the final response.
+
+![System architecture showing the agent workflow and retrieval tools](media/system-architecture.png)
+
 ## Demo
 View the latest demo video [here](media/video_demo.mp4)
 
