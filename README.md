@@ -19,7 +19,9 @@ Check the website [AskAisle.site](https://askaisle.site/)
 ### Architecture decisions
 
 <details>
-<summary><strong>Agent orchestration: one agent, three retrieval tools</strong></summary>
+<summary><h3>Agent orchestration: one agent, three retrieval tools</h3></summary>
+
+<br>
 
 LangGraph has one outer agent node. Inside it, LangChain's `create_agent` runs the model–tool loop: select tools, receive results, and generate the final response. This supports combinations of shopping, tracking, and policy requests without a separate intent classifier or a fixed route for every combination.
 
@@ -30,7 +32,9 @@ LangGraph has one outer agent node. Inside it, LangChain's `create_agent` runs t
 </details>
 
 <details>
-<summary><strong>Hybrid retrieval: SQL filters first, semantic ranking second</strong></summary>
+<summary><h3>Hybrid retrieval: SQL filters first, semantic ranking second</h3></summary>
+
+<br>
 
 Product discovery combines exact constraints with descriptive matching:
 
@@ -49,7 +53,9 @@ This keeps a preference such as “comfortable for long walks” useful without 
 </details>
 
 <details>
-<summary><strong>Conversation memory: persistent history, bounded model context</strong></summary>
+<summary><h3>Conversation memory: persistent history, bounded model context</h3></summary>
+
+<br>
 
 PostgreSQL checkpoints retain conversation state under a key derived from both user and conversation IDs, keeping users' histories separate. Before an agent invocation, recent dialogue is trimmed to approximately 4,000 tokens to bound the history sent to the model.
 
@@ -58,7 +64,9 @@ PostgreSQL checkpoints retain conversation state under a key derived from both u
 </details>
 
 <details>
-<summary><strong>Authentication and storage: shared limits, separate responsibilities</strong></summary>
+<summary><h3>Authentication and storage: shared limits, separate responsibilities</h3></summary>
+
+<br>
 
 **Access and usage:** FastAPI validates Auth0 RS256 tokens, including issuer, audience, expiry, and identity. An atomic Redis Lua script enforces shared per-user limits of 10 requests per 60 seconds and 100 per 24 hours before model execution. If Redis fails, chat returns a service-unavailable response.
 
