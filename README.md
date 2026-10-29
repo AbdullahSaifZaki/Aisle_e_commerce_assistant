@@ -19,9 +19,9 @@ Check the website [AskAisle.site](https://askaisle.site/)
 ### Architecture decisions
 
 <details>
-<summary><h3>Agent orchestration: one agent, three retrieval tools</h3></summary>
+<summary><strong>Agent orchestration: one agent, three retrieval tools</strong></summary>
 
-<br>
+<hr>
 
 LangGraph has one outer agent node. Inside it, LangChain's `create_agent` runs the model–tool loop: select tools, receive results, and generate the final response. This supports combinations of shopping, tracking, and policy requests without a separate intent classifier or a fixed route for every combination.
 
@@ -29,12 +29,14 @@ LangGraph has one outer agent node. Inside it, LangChain's `create_agent` runs t
 
 **Trade-off:** Valid arguments can still omit a requested filter. Grounding answers and asking for missing information depend on model behavior, so both tool calls and final replies are evaluated.
 
+<hr>
+
 </details>
 
 <details>
-<summary><h3>Hybrid retrieval: SQL filters first, semantic ranking second</h3></summary>
+<summary><strong>Hybrid retrieval: SQL filters first, semantic ranking second</strong></summary>
 
-<br>
+<hr>
 
 Product discovery combines exact constraints with descriptive matching:
 
@@ -50,27 +52,33 @@ This keeps a preference such as “comfortable for long walks” useful without 
 
 **FAQ and orders:** FAQ search ranks embedded question–answer pairs and fetches the top five records from MySQL. There is no similarity cutoff, so the model must judge relevance. Order tracking uses an exact order-ID lookup rather than semantic matching.
 
+<hr>
+
 </details>
 
 <details>
-<summary><h3>Conversation memory: persistent history, bounded model context</h3></summary>
+<summary><strong>Conversation memory: persistent history, bounded model context</strong></summary>
 
-<br>
+<hr>
 
 PostgreSQL checkpoints retain conversation state under a key derived from both user and conversation IDs, keeping users' histories separate. Before an agent invocation, recent dialogue is trimmed to approximately 4,000 tokens to bound the history sent to the model.
 
 **Trade-off:** The outer graph retains user messages and final replies, while intermediate tool messages stay inside the current invocation. Later turns can lose older details and cannot reread the original tool evidence from dialogue history. There is no summarization, and trimming does not bound checkpoint storage or subsequent tool-result tokens.
 
+<hr>
+
 </details>
 
 <details>
-<summary><h3>Authentication and storage: shared limits, separate responsibilities</h3></summary>
+<summary><strong>Authentication and storage: shared limits, separate responsibilities</strong></summary>
 
-<br>
+<hr>
 
 **Access and usage:** FastAPI validates Auth0 RS256 tokens, including issuer, audience, expiry, and identity. An atomic Redis Lua script enforces shared per-user limits of 10 requests per 60 seconds and 100 per 24 hours before model execution. If Redis fails, chat returns a service-unavailable response.
 
 **Commerce and memory:** MySQL separates product records from variants so sizes, colors, and prices can vary without duplicating the core product. SQLAlchemy provides parameterized queries. PostgreSQL stores conversation checkpoints separately, at the cost of operating two database services.
+
+<hr>
 
 </details>
 
