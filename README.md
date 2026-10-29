@@ -95,17 +95,6 @@ LangSmith runs **44 synthetic scenarios across 48 turns**, covering product filt
 - **Tool checks:** Deterministic evaluators compare names, counts, and requested arguments, independently of execution order. The current matcher normalizes omitted defaults.
 - **Response checks:** A structured LLM judge compares answers with reference criteria and retrieved evidence, allowing equivalent wording.
 
-The documented baseline, `Aisle_evaluation-90ea702a`, completed all 44 scenarios:
-
-| Check | Passed | Pass rate |
-| --- | ---: | ---: |
-| Response quality | 42/44 | 95.45% |
-| Tool arguments | 35/44 | 79.55% |
-| Tool usage | 40/44 | 90.91% |
-| **All three checks** | **35/44** | **79.55%** |
-
-Failures exposed omitted brands, incorrect follow-up filters, and lookups without an order ID. Tool-usage failures also fail argument scoring. The judge accepted some incorrect answers, so its score is not a verified accuracy rate. These baseline scores precede later default-handling changes; no improvement has been measured.
-
 **[Explore evaluation/](evaluation/)** for the full methodology, experiments, results, and failure analysis. The folder contains the runner, dataset, and detailed report behind this overview.
 
 ## Run locally
