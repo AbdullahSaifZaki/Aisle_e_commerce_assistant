@@ -12,12 +12,54 @@ Check the website [AskAisle.site](https://askaisle.site/)
 
 ## How it works
 
-1. **Receive the message:** A JavaScript frontend sends authenticated requests to FastAPI. Auth0 verifies login, and Redis limits requests.
-2. **Choose the tools:** GPT-5.4 Nano uses LangChain to select product search, order lookup, or FAQ search. One message can trigger multiple tools.
-3. **Retrieve information:** SQLAlchemy queries MySQL. Product search combines structured filters with semantic ranking; FAQ search retrieves relevant answers. Both use `all-MiniLM-L6-v2` embeddings and NumPy similarity calculations.
-4. **Reply with context:** The model turns retrieved information into a conversational answer. LangGraph saves conversation checkpoints in PostgreSQL and trims the agent’s conversation context to approximately 4,000 tokens.
+### Agent orchestration and tool calling
 
-The assistant retrieves information; it cannot place orders, process payments, or modify orders.
+FastAPI passes authenticated messages into a LangGraph workflow with one outer agent node. Inside it, LangChain's `create_agent` runs GPT-5.4 Nano in a model–tool loop using `search_products`, `order_status`, and `faq_search`. The model can combine these tools within one request, avoiding a separate intent classifier or fixed route for every task combination.
+
+Pydantic schemas constrain arguments such as price ranges, categories, and decimal shoe sizes; tools execute predefined, parameterized queries. These boundaries constrain database access but cannot ensure the model preserves every requested filter. The prompt directs it to ground answers in results and ask for missing information. The tools retrieve information and cannot place orders, process payments, or modify orders.
+
+### Hybrid retrieval and semantic ranking
+
+Product search separates exact constraints from descriptive relevance. SQL joins products with variants and applies supplied category, brand, color, size, price, and rating filters. Semantic ranking then distinguishes descriptive matches, such as shoes for long walks, within that candidate set. Similarity cannot override a supplied filter, but a filter omitted by the model never reaches SQL.
+
+At startup, product names, descriptions, brands, and categories are embedded with OpenAI's `text-embedding-3-small` and cached by variant ID. NumPy ranks candidates by dot-product similarity to the latest user message, returning five matches by default. In-memory vectors avoid a separate vector database, but consume worker memory, add startup API calls, and require rebuilding when the catalog changes.
+
+The SQL stage returns at most 20 candidates, so semantic ranking cannot recover a relevant product outside that subset. Price sorting is applied before this cap, then semantic ranking determines the returned order; the tool therefore does not guarantee final price order.
+
+FAQ retrieval ranks embedded question–answer pairs and fetches the top five records from MySQL, supporting paraphrased policy questions. Without a similarity cutoff, unrelated FAQs can still reach the model, which must judge relevance. Order tracking uses an exact order-ID lookup because a specific order should not be selected by semantic similarity.
+
+### Memory and context management
+
+LangGraph checkpoints conversation state in PostgreSQL, using a key derived from both user and conversation IDs to separate histories. Before each invocation, recent dialogue is trimmed to approximately 4,000 tokens, bounding model history without limiting checkpoint storage or subsequent tool-result tokens.
+
+The outer graph retains user messages and final replies; intermediate tool messages stay inside the current invocation. This reduces subsequent context, but older details can fall outside the window and original tool evidence is unavailable in later dialogue. There is no conversation summarization.
+
+### Authentication and rate limiting
+
+FastAPI validates Auth0 RS256 tokens, including issuer, audience, expiry, and user identity. An atomic Redis Lua script enforces shared per-user limits of 10 requests per 60 seconds and 100 per 24 hours before model execution. Chat returns a service-unavailable response if Redis fails.
+
+### Database implementation
+
+MySQL stores products separately from variants, allowing sizes, colors, and prices to vary without duplicating the core product record. SQLAlchemy executes parameterized queries for catalog, FAQ, and order retrieval. PostgreSQL stores LangGraph checkpoints separately from commerce data, at the cost of operating two database services.
+
+### Evaluation methodology and results
+
+LangSmith evaluates 44 synthetic scenarios containing 48 turns, covering product filters, tracking, policies, multiple requests, memory, unsupported actions, and prompt injection. Scenarios run against the agent and tools with isolated histories. Callbacks capture intermediate tool executions for scoring alongside final replies.
+
+Deterministic evaluators check tool names, counts, and requested arguments independently of execution order; the current matcher normalizes omitted defaults. A structured LLM judge assesses replies against reference criteria and retrieved evidence, combining precise tool checks with flexible grading of natural language.
+
+The documented baseline, `Aisle_evaluation-90ea702a`, completed all 44 scenarios:
+
+| Check | Passed | Pass rate |
+| --- | ---: | ---: |
+| Response quality | 42/44 | 95.45% |
+| Tool arguments | 35/44 | 79.55% |
+| Tool usage | 40/44 | 90.91% |
+| All three checks | 35/44 | 79.55% |
+
+Failures included omitted brands, incorrect follow-up filters, and order lookups without an ID. Tool-usage failures also fail argument scoring, so those metrics are coupled. The response judge accepted some incorrect answers; its score is not a verified accuracy rate. Results describe the recorded synthetic baseline, before later default-handling changes; no improvement has been measured.
+
+**For the full methodology, experiments, results, and failure analysis, see [evaluation/](evaluation/).** It contains the runner, dataset, and detailed report supporting this overview.
 
 ## Run locally
 
@@ -78,7 +120,7 @@ Set the application URLs:
 | Allowed Logout URLs | `http://127.0.0.1:8770/` |
 | Allowed Web Origins | `http://127.0.0.1:8770` |
 
-Create `aisle_frontend/.env.local`:
+Create `frontend/.env.local`:
 
 ```dotenv
 VITE_AUTH0_DOMAIN=YOUR_TENANT.auth0.com
@@ -97,19 +139,19 @@ From the project’s main folder:
 python3 -m venv .venv
 source .venv/bin/activate
 python -m pip install -r requirements.txt
-python -m uvicorn main:app --reload --host 127.0.0.1 --port 8000
+python -m uvicorn main:app --app-dir backend --reload --host 127.0.0.1 --port 8000
 ```
 
 On Windows, use `python` instead of `python3` and activate with `.venv\Scripts\Activate.ps1`.
 
-The first launch downloads the embedding model, so startup may take longer.
+Backend startup reads the catalog and FAQs and generates embeddings through OpenAI, so it requires database and API access and may take longer.
 
 ### 6. Start the frontend
 
 Open a second terminal in the project’s main folder:
 
 ```bash
-cd aisle_frontend
+cd frontend
 npm ci
 npm run dev
 ```
