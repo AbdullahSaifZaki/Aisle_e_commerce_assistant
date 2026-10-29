@@ -12,41 +12,66 @@ Check the website [AskAisle.site](https://askaisle.site/)
 
 ## How it works
 
-### Agent orchestration and tool calling
+1. **Understand the request.** FastAPI passes the message and recent conversation history to GPT-5.4 Nano through LangGraph.
+2. **Retrieve the facts.** The agent selects product search, order tracking, or FAQ tools—and can combine them for multiple requests.
+3. **Answer with context.** The model uses the retrieved results to reply, and LangGraph saves the updated conversation in PostgreSQL.
 
-FastAPI passes authenticated messages into a LangGraph workflow with one outer agent node. Inside it, LangChain's `create_agent` runs GPT-5.4 Nano in a model–tool loop using `search_products`, `order_status`, and `faq_search`. The model can combine these tools within one request, avoiding a separate intent classifier or fixed route for every task combination.
+### Architecture decisions
 
-Pydantic schemas constrain arguments such as price ranges, categories, and decimal shoe sizes; tools execute predefined, parameterized queries. These boundaries constrain database access but cannot ensure the model preserves every requested filter. The prompt directs it to ground answers in results and ask for missing information. The tools retrieve information and cannot place orders, process payments, or modify orders.
+<details>
+<summary><strong>Agent orchestration: one agent, three retrieval tools</strong></summary>
 
-### Hybrid retrieval and semantic ranking
+LangGraph has one outer agent node. Inside it, LangChain's `create_agent` runs the model–tool loop: select tools, receive results, and generate the final response. This supports combinations of shopping, tracking, and policy requests without a separate intent classifier or a fixed route for every combination.
 
-Product search separates exact constraints from descriptive relevance. SQL joins products with variants and applies supplied category, brand, color, size, price, and rating filters. Semantic ranking then distinguishes descriptive matches, such as shoes for long walks, within that candidate set. Similarity cannot override a supplied filter, but a filter omitted by the model never reaches SQL.
+**Boundaries:** Pydantic schemas constrain categories, price ranges, and sizes; tools execute predefined, parameterized queries. They retrieve information and cannot purchase, pay, or modify orders.
 
-At startup, product names, descriptions, brands, and categories are embedded with OpenAI's `text-embedding-3-small` and cached by variant ID. NumPy ranks candidates by dot-product similarity to the latest user message, returning five matches by default. In-memory vectors avoid a separate vector database, but consume worker memory, add startup API calls, and require rebuilding when the catalog changes.
+**Trade-off:** Valid arguments can still omit a requested filter. Grounding answers and asking for missing information depend on model behavior, so both tool calls and final replies are evaluated.
 
-The SQL stage returns at most 20 candidates, so semantic ranking cannot recover a relevant product outside that subset. Price sorting is applied before this cap, then semantic ranking determines the returned order; the tool therefore does not guarantee final price order.
+</details>
 
-FAQ retrieval ranks embedded question–answer pairs and fetches the top five records from MySQL, supporting paraphrased policy questions. Without a similarity cutoff, unrelated FAQs can still reach the model, which must judge relevance. Order tracking uses an exact order-ID lookup because a specific order should not be selected by semantic similarity.
+<details>
+<summary><strong>Hybrid retrieval: SQL filters first, semantic ranking second</strong></summary>
 
-### Memory and context management
+Product discovery combines exact constraints with descriptive matching:
 
-LangGraph checkpoints conversation state in PostgreSQL, using a key derived from both user and conversation IDs to separate histories. Before each invocation, recent dialogue is trimmed to approximately 4,000 tokens, bounding model history without limiting checkpoint storage or subsequent tool-result tokens.
+1. **Filter in MySQL.** Join products and variants, applying supplied brand, category, color, size, price, and rating constraints.
+2. **Rank by meaning.** Embed the latest user message and compare it with candidate descriptions using NumPy dot products.
+3. **Return the strongest matches.** Select five results by default for the agent to use in its answer.
 
-The outer graph retains user messages and final replies; intermediate tool messages stay inside the current invocation. This reduces subsequent context, but older details can fall outside the window and original tool evidence is unavailable in later dialogue. There is no conversation summarization.
+This keeps a preference such as “comfortable for long walks” useful without allowing similarity to override an applied size or price filter. A filter omitted by the model, however, never reaches SQL.
 
-### Authentication and rate limiting
+**Embedding strategy:** OpenAI's `text-embedding-3-small` embeds product names, descriptions, brands, and categories at startup. Vectors are cached in memory by variant ID, avoiding a separate vector database. The cost is worker memory, startup API calls, and rebuilding the lookup when the catalog changes.
 
-FastAPI validates Auth0 RS256 tokens, including issuer, audience, expiry, and user identity. An atomic Redis Lua script enforces shared per-user limits of 10 requests per 60 seconds and 100 per 24 hours before model execution. Chat returns a service-unavailable response if Redis fails.
+**Retrieval limits:** SQL returns at most 20 candidates before semantic ranking. Relevant products outside that set cannot be recovered. Price sorting happens before the cap; semantic ranking can change the final price order.
 
-### Database implementation
+**FAQ and orders:** FAQ search ranks embedded question–answer pairs and fetches the top five records from MySQL. There is no similarity cutoff, so the model must judge relevance. Order tracking uses an exact order-ID lookup rather than semantic matching.
 
-MySQL stores products separately from variants, allowing sizes, colors, and prices to vary without duplicating the core product record. SQLAlchemy executes parameterized queries for catalog, FAQ, and order retrieval. PostgreSQL stores LangGraph checkpoints separately from commerce data, at the cost of operating two database services.
+</details>
 
-### Evaluation methodology and results
+<details>
+<summary><strong>Conversation memory: persistent history, bounded model context</strong></summary>
 
-LangSmith evaluates 44 synthetic scenarios containing 48 turns, covering product filters, tracking, policies, multiple requests, memory, unsupported actions, and prompt injection. Scenarios run against the agent and tools with isolated histories. Callbacks capture intermediate tool executions for scoring alongside final replies.
+PostgreSQL checkpoints retain conversation state under a key derived from both user and conversation IDs, keeping users' histories separate. Before an agent invocation, recent dialogue is trimmed to approximately 4,000 tokens to bound the history sent to the model.
 
-Deterministic evaluators check tool names, counts, and requested arguments independently of execution order; the current matcher normalizes omitted defaults. A structured LLM judge assesses replies against reference criteria and retrieved evidence, combining precise tool checks with flexible grading of natural language.
+**Trade-off:** The outer graph retains user messages and final replies, while intermediate tool messages stay inside the current invocation. Later turns can lose older details and cannot reread the original tool evidence from dialogue history. There is no summarization, and trimming does not bound checkpoint storage or subsequent tool-result tokens.
+
+</details>
+
+<details>
+<summary><strong>Authentication and storage: shared limits, separate responsibilities</strong></summary>
+
+**Access and usage:** FastAPI validates Auth0 RS256 tokens, including issuer, audience, expiry, and identity. An atomic Redis Lua script enforces shared per-user limits of 10 requests per 60 seconds and 100 per 24 hours before model execution. If Redis fails, chat returns a service-unavailable response.
+
+**Commerce and memory:** MySQL separates product records from variants so sizes, colors, and prices can vary without duplicating the core product. SQLAlchemy provides parameterized queries. PostgreSQL stores conversation checkpoints separately, at the cost of operating two database services.
+
+</details>
+
+### Evaluation
+
+LangSmith runs **44 synthetic scenarios across 48 turns**, covering product filters, tracking, policies, multiple requests, memory, unsupported actions, and prompt injection. Each scenario has isolated history; callbacks capture intermediate tool calls alongside final replies.
+
+- **Tool checks:** Deterministic evaluators compare names, counts, and requested arguments, independently of execution order. The current matcher normalizes omitted defaults.
+- **Response checks:** A structured LLM judge compares answers with reference criteria and retrieved evidence, allowing equivalent wording.
 
 The documented baseline, `Aisle_evaluation-90ea702a`, completed all 44 scenarios:
 
@@ -55,11 +80,11 @@ The documented baseline, `Aisle_evaluation-90ea702a`, completed all 44 scenarios
 | Response quality | 42/44 | 95.45% |
 | Tool arguments | 35/44 | 79.55% |
 | Tool usage | 40/44 | 90.91% |
-| All three checks | 35/44 | 79.55% |
+| **All three checks** | **35/44** | **79.55%** |
 
-Failures included omitted brands, incorrect follow-up filters, and order lookups without an ID. Tool-usage failures also fail argument scoring, so those metrics are coupled. The response judge accepted some incorrect answers; its score is not a verified accuracy rate. Results describe the recorded synthetic baseline, before later default-handling changes; no improvement has been measured.
+Failures exposed omitted brands, incorrect follow-up filters, and lookups without an order ID. Tool-usage failures also fail argument scoring. The judge accepted some incorrect answers, so its score is not a verified accuracy rate. These baseline scores precede later default-handling changes; no improvement has been measured.
 
-**For the full methodology, experiments, results, and failure analysis, see [evaluation/](evaluation/).** It contains the runner, dataset, and detailed report supporting this overview.
+**[Explore evaluation/](evaluation/)** for the full methodology, experiments, results, and failure analysis. The folder contains the runner, dataset, and detailed report behind this overview.
 
 ## Run locally
 
