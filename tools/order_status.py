@@ -1,13 +1,10 @@
-from dotenv import load_dotenv
 from pydantic import BaseModel, Field
 
-from langchain_openai import ChatOpenAI
-from langchain.messages import AnyMessage
 
 from database.tables import engine
 from sqlalchemy import text
 
-from langchain.tools import tool,ToolRuntime
+from langchain.tools import tool
 
 class OrdersIdExtractor(BaseModel):
     order_id:int|None = Field(

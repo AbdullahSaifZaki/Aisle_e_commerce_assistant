@@ -6,10 +6,9 @@ from models.embedding import embedding_model
 from database.tables import engine
 from sqlalchemy import text,bindparam
 
-from sentence_transformers import SentenceTransformer
 import numpy as np
 from langchain.tools import tool,ToolRuntime
-from langchain.messages import AnyMessage,  HumanMessage
+from langchain.messages import  HumanMessage
 
 
 model = agent_model
@@ -49,9 +48,8 @@ def create_embedding_text(database):
 
 
 def text_embedding(embedding_text,embedding_model):
-    embedded_text = embedding_model.encode(
-        embedding_text,
-        normalize_embeddings=True
+    embedded_text = embedding_model.embed_documents(
+        embedding_text
         )
     return embedded_text
 
@@ -72,10 +70,9 @@ def semantic_search_faq(query, embedded_faqs,embedding_model, top_k=5):
         faq["embedded_text"] for faq in embedded_faqs
     ])
 
-    embedded_query = embedding_model.encode(
-        query,
-        normalize_embeddings=True,
-    )
+    embedded_query = embedding_model.embed_query(
+        query
+        )
 
     similarities = faqs_embedding @ embedded_query
     top_indices = np.argsort(similarities)[::-1][:top_k]
@@ -143,3 +140,12 @@ def faq_search(question:str|None = None,runtime: ToolRuntime = None,):
     semantic_searched_questions = semantic_search_faq(query=message,embedded_faqs=embedded_faq_db,embedding_model=embedding_model,)
 
     return semantic_searched_questions
+
+def main():
+    # db = creating_faq_db()
+    # embedded_faq_db  = semantic_ready_faq(faq = db, embedding_model=embedding_model)
+    semantic_searched_questions = semantic_search_faq(query="I want to ask about my missing order",embedded_faqs=embedded_faq_db,embedding_model=embedding_model,)
+    print(semantic_searched_questions)
+
+if __name__ =="__main__":
+    main()

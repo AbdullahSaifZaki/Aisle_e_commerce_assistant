@@ -1,21 +1,15 @@
-from typing import Literal, Annotated
+from typing import Annotated
 from typing_extensions import TypedDict
-
-from dotenv import load_dotenv
-from pydantic import BaseModel, Field
 
 from langgraph.graph import StateGraph, START, END
 from langgraph.graph.message import add_messages
-from langchain.messages import AnyMessage, HumanMessage, AIMessage
+from langchain.messages import AnyMessage
 
 from models.agent_model import agent_model
 from langchain.agents import create_agent
-from langgraph.checkpoint.memory import InMemorySaver
-import os
 import time 
 
 from prompts import main_agent_prompt
-from langgraph.checkpoint.postgres import PostgresSaver
 from langchain_core.messages import trim_messages
 
 from tools.product_search import search_products

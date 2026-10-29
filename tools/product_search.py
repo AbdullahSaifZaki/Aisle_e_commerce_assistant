@@ -1,10 +1,8 @@
 from typing import Literal
 
-from dotenv import load_dotenv
 from pydantic import BaseModel, Field, model_validator
 
-from langchain_openai import ChatOpenAI
-from langchain.messages import AnyMessage,  HumanMessage
+from langchain.messages import   HumanMessage
 
 from database.tables import engine
 from sqlalchemy import text
@@ -233,9 +231,8 @@ def create_embedding_text(products):
     return embedding_texts
 
 def text_embedding(products_texts,embedding_model = embedding_model):
-    embedded_text = embedding_model.encode(
-        products_texts,
-        normalize_embeddings=True
+    embedded_text = embedding_model.embed_documents(
+        products_texts
         )
     return embedded_text
 
@@ -283,9 +280,8 @@ def semantic_search_filtered(
     if not candidate_embeddings:
         return []
     candidate_embeddings = np.array(candidate_embeddings)
-    query_embedding = embedding_model.encode(
-        query,
-        normalize_embeddings=True
+    query_embedding = embedding_model.embed_query(
+        query
     )
 
     similarities = candidate_embeddings @ query_embedding
