@@ -14,8 +14,6 @@ The diagram below shows the agent workflow: user input, conversation context, to
 ## Demo
 View the latest demo video [here](media/video_demo.mp4)
 
-Check the website [AskAisle.site](https://askaisle.site/)
-
 ## How it works
 
 1. **Understand the request.** FastAPI passes the message and recent conversation history to GPT-5.4 Nano through LangGraph.
