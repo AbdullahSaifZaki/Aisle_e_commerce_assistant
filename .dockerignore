@@ -1,8 +1,0 @@
-.git
-.env*
-.venv
-frontend
-evaluation
-media
-.vscode
-**/__pycache__

@@ -1,8 +1,0 @@
-.env*
-.venv
-.vscode
-frontend/node_modules
-frontend/dist
-tests
-evaluation
-media

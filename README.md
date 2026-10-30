@@ -196,23 +196,3 @@ npm run dev
 
 Keep both terminals open while using the app. Press **Ctrl+C** in each to stop it.
 
-
-
-
-## Deploy
-
-The frontend and backend can run as **two Vercel projects** from this repository, with MySQL, PostgreSQL, and Redis hosted separately.
-
-| Project | Root directory | Settings |
-| --- | --- | --- |
-| Backend | Repository root | FastAPI; entrypoint `app.py`; Python 3.12; `vercel.json` configures a 300-second limit |
-| Frontend | `frontend` | Vite; build `npm run build`; output `dist` |
-
-1. Configure the backend environment: `OPENAI_API_KEY`, `ECOMMERCE_DATABASE_URL`, `MEMORY_DATABASE_URL`, `REDIS_URL`, `AUTH0_DOMAIN`, `AUTH0_AUDIENCE`, and `CORS_ORIGINS` (comma-separated frontend origins, including `https://askaisle.site`). Use reachable remote database hosts, provider-required TLS parameters, and credentials permitted by the databases' network access rules. PostgreSQL must allow checkpoint schema creation; use a direct or session-pooler connection. Redis stores both rate counters and shared document embeddings; use a persistent service with adequate memory.
-2. Deploy the backend and check `/health`. This endpoint confirms the HTTP process is running, not database readiness. A failed chat dependency returns 503; inspect server logs and verify each database connection. `/chat` and `/api/chat` both accept authenticated POST requests.
-3. Set frontend `VITE_API_URL=https://YOUR-BACKEND-DOMAIN/chat` and the three `VITE_AUTH0_*` variables before building. Production builds require an explicit HTTPS API URL. Add the frontend URL to Auth0 callback/logout URLs and web origins, then deploy the frontend. If Vercel Deployment Protection is enabled on the backend, configure access so browser API requests can reach it.
-4. Verify an authenticated chat with product, FAQ, and order requests. Confirm saved conversation history works across requests. A successful build or health response alone does not verify these external services.
-
-For Cloud Run or another container host, build the root `Dockerfile`; it runs `uvicorn app:app` on `0.0.0.0` using the platform's `PORT` (default 8080). Configure the same environment variables. Local `.env` files are excluded from deployment artifacts.
-
-The frontend waits up to 240 seconds; Vercel permits up to 300 seconds in this configuration. A client timeout does not cancel server processing. Cache misses may generate duplicate embedding requests during simultaneous cold starts. Old cache entries remain until evicted or explicitly removed.
