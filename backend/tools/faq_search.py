@@ -1,3 +1,4 @@
+from functools import lru_cache
 from dotenv import load_dotenv
 from pydantic import BaseModel, Field
 
@@ -115,8 +116,9 @@ def semantic_ready_faq(faq,embedding_model):
     embedded_faq = create_embedding_faq(faq, embedded_text)
 
     return embedded_faq
-faq_db = creating_faq_db()
-embedded_faq_db = semantic_ready_faq(faq=faq_db,embedding_model=embedding_model)
+@lru_cache(maxsize=1)
+def get_faq_embeddings():
+    return semantic_ready_faq(faq=creating_faq_db(), embedding_model=embedding_model)
 
 @tool (args_schema=QuestionsFilter)
 def faq_search(question:str|None = None,runtime: ToolRuntime = None,):
@@ -137,14 +139,14 @@ def faq_search(question:str|None = None,runtime: ToolRuntime = None,):
     if isinstance(msg, HumanMessage)
     )
 
-    semantic_searched_questions = semantic_search_faq(query=message,embedded_faqs=embedded_faq_db,embedding_model=embedding_model,)
+    semantic_searched_questions = semantic_search_faq(query=message,embedded_faqs=get_faq_embeddings(),embedding_model=embedding_model,)
 
     return semantic_searched_questions
 
 def main():
     # db = creating_faq_db()
     # embedded_faq_db  = semantic_ready_faq(faq = db, embedding_model=embedding_model)
-    semantic_searched_questions = semantic_search_faq(query="I want to ask about my missing order",embedded_faqs=embedded_faq_db,embedding_model=embedding_model,)
+    semantic_searched_questions = semantic_search_faq(query="I want to ask about my missing order",embedded_faqs=get_faq_embeddings(),embedding_model=embedding_model,)
     print(semantic_searched_questions)
 
 if __name__ =="__main__":

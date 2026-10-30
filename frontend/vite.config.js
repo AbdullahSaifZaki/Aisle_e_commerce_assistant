@@ -1,4 +1,4 @@
-import { defineConfig } from 'vite';
+import { defineConfig, loadEnv } from 'vite';
 
 const proxy = {
   '^/api/': {
@@ -8,7 +8,10 @@ const proxy = {
   },
 };
 
-export default defineConfig({
-  server: { proxy },
-  preview: { proxy },
+export default defineConfig(({ command, mode }) => {
+  const env = loadEnv(mode, process.cwd(), 'VITE_');
+  if (command === 'build' && !env.VITE_API_URL?.startsWith('https://')) {
+    throw new Error('Set VITE_API_URL to your deployed HTTPS backend /chat URL before building.');
+  }
+  return { server: { proxy }, preview: { proxy } };
 });

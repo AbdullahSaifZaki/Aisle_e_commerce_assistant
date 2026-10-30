@@ -52,7 +52,7 @@ Product discovery combines exact constraints with descriptive matching:
 
 This keeps a preference such as “comfortable for long walks” useful without allowing similarity to override an applied size or price filter. A filter omitted by the model, however, never reaches SQL.
 
-**Embedding strategy:** OpenAI's `text-embedding-3-small` embeds product names, descriptions, brands, and categories at startup. Vectors are cached in memory by variant ID, avoiding a separate vector database. The cost is worker memory, startup API calls, and rebuilding the lookup when the catalog changes.
+**Embedding strategy:** OpenAI's `text-embedding-3-small` embeds product names, descriptions, brands, and categories on demand. Document vectors are cached in Redis by model and text hash and reused across workers and restarts. Each worker loads its lookup on first use; restart workers after catalog changes to reload their in-memory lookup. Redis eviction can require recomputing vectors.
 
 **Retrieval limits:** SQL returns at most 20 candidates before semantic ranking. Relevant products outside that set cannot be recovered. Price sorting happens before the cap; semantic ranking can change the final price order.
 
@@ -180,7 +180,7 @@ python -m uvicorn main:app --app-dir backend --reload --host 127.0.0.1 --port 80
 
 On Windows, use `python` instead of `python3` and activate with `.venv\Scripts\Activate.ps1`.
 
-Backend startup reads the catalog and FAQs and generates embeddings through OpenAI, so it requires database and API access and may take longer.
+Product and FAQ tools load data on first use and reuse document embeddings from Redis. The first uncached search takes longer while OpenAI generates missing vectors.
 
 ### 6. Start the frontend
 
@@ -198,3 +198,21 @@ Keep both terminals open while using the app. Press **Ctrl+C** in each to stop i
 
 
 
+
+## Deploy
+
+The frontend and backend can run as **two Vercel projects** from this repository, with MySQL, PostgreSQL, and Redis hosted separately.
+
+| Project | Root directory | Settings |
+| --- | --- | --- |
+| Backend | Repository root | FastAPI; entrypoint `app.py`; Python 3.12; `vercel.json` configures a 300-second limit |
+| Frontend | `frontend` | Vite; build `npm run build`; output `dist` |
+
+1. Configure the backend environment: `OPENAI_API_KEY`, `ECOMMERCE_DATABASE_URL`, `MEMORY_DATABASE_URL`, `REDIS_URL`, `AUTH0_DOMAIN`, `AUTH0_AUDIENCE`, and `CORS_ORIGINS` (comma-separated frontend origins, including `https://askaisle.site`). Use reachable remote database hosts, provider-required TLS parameters, and credentials permitted by the databases' network access rules. PostgreSQL must allow checkpoint schema creation; use a direct or session-pooler connection. Redis stores both rate counters and shared document embeddings; use a persistent service with adequate memory.
+2. Deploy the backend and check `/health`. This endpoint confirms the HTTP process is running, not database readiness. A failed chat dependency returns 503; inspect server logs and verify each database connection. `/chat` and `/api/chat` both accept authenticated POST requests.
+3. Set frontend `VITE_API_URL=https://YOUR-BACKEND-DOMAIN/chat` and the three `VITE_AUTH0_*` variables before building. Production builds require an explicit HTTPS API URL. Add the frontend URL to Auth0 callback/logout URLs and web origins, then deploy the frontend. If Vercel Deployment Protection is enabled on the backend, configure access so browser API requests can reach it.
+4. Verify an authenticated chat with product, FAQ, and order requests. Confirm saved conversation history works across requests. A successful build or health response alone does not verify these external services.
+
+For Cloud Run or another container host, build the root `Dockerfile`; it runs `uvicorn app:app` on `0.0.0.0` using the platform's `PORT` (default 8080). Configure the same environment variables. Local `.env` files are excluded from deployment artifacts.
+
+The frontend waits up to 240 seconds; Vercel permits up to 300 seconds in this configuration. A client timeout does not cancel server processing. Cache misses may generate duplicate embedding requests during simultaneous cold starts. Old cache entries remain until evicted or explicitly removed.

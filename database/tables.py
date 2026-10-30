@@ -8,7 +8,10 @@ from datetime import datetime
 load_dotenv()
 
 db_url =os.getenv("ECOMMERCE_DATABASE_URL")
-engine = create_engine(db_url)
+engine = create_engine(
+    db_url, pool_pre_ping=True, pool_recycle=300, pool_size=2, max_overflow=2,
+    connect_args={"connect_timeout": 5, "read_timeout": 30, "write_timeout": 30},
+)
 base = declarative_base()
 
 class products(base):

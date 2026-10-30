@@ -5,6 +5,8 @@ load_dotenv()
 agent_model = ChatOpenAI(
     model = "gpt-5.4-nano",
     temperature = 0,
+    timeout=60,
+    max_retries=1,
     reasoning_effort = "none",
         model_kwargs={
         "prompt_cache_key": "ecommerce-assistant-v1"

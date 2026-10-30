@@ -1,3 +1,4 @@
+from functools import lru_cache
 from typing import Literal
 
 from pydantic import BaseModel, Field, model_validator
@@ -299,8 +300,9 @@ def semantic_search_filtered(
     return results
 
 
-products_database = call_database()
-embedding_lookup = build_embedding_lookup(products_database)
+@lru_cache(maxsize=1)
+def get_embedding_lookup():
+    return build_embedding_lookup(call_database())
 
 
 @tool(args_schema=ProductFilter)
@@ -362,7 +364,7 @@ def search_products(
 
     semantic_searched_products = semantic_search_filtered(
         query = message,
-        embedding_lookup = embedding_lookup,
+        embedding_lookup = get_embedding_lookup(),
         filtered_products = filtered_products,
         top_k = normalized_filters["limit"] or 5
     )
