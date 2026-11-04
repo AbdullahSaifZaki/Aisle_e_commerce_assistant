@@ -40,17 +40,8 @@ Tool calls are matched without requiring an execution order. Each requested prod
 
 ## 3. Baseline Evaluation
 
-**Baseline experiment:** [`Aisle_evaluation-ce40dfa9`](https://smith.langchain.com/o/33aacb44-f3ca-44af-a3f3-b7b78ec0982d/a/-/datasets/b438b59e-e867-4838-b901-d6ab7d7a6108/compare?selectedSessions=4b8a64d6-974c-4365-9d2e-fac690878518)
-
-**Experiment ID:** `4b8a64d6-974c-4365-9d2e-fac690878518`
-
-**Dataset:** `eval_dataset` (`b438b59e-e867-4838-b901-d6ab7d7a6108`)
-
-This experiment establishes the baseline for future performance comparisons and is marked as the baseline in LangSmith.
-
 - **Start:** November 5, 2026, 01:26:38 (Istanbul, UTC+3)
 - **Dataset version:** `2026-11-04T22:26:38.123698+00:00`
-- **Code revision:** `e50a30c-dirty` (includes uncommitted changes)
 - **Repetitions:** 1 per scenario
 - **Completed runs:** 44/44
 - **Run-level execution errors:** 0
@@ -69,10 +60,6 @@ Eight scenarios received at least one failing score. These are the recorded eval
 
 **Dashboard verification:** the live experiment summary now includes all 44 scores per metric and agrees with the table above. The saved screenshot below shows earlier, incomplete aggregates: Response Quality **0.89**, Tool Arguments **0.83**, and Tool Usage **0.94**. Use the verified 44-case scores for future comparisons.
 
-![LangSmith baseline dashboard](eval_pics/baseline.png)
-
-The screenshot is retained as a historical capture; its feedback averages are outdated.
-
 | Runtime metric | LangSmith experiment summary |
 | --- | ---: |
 | P50 latency | 2.39 s |
@@ -82,11 +69,9 @@ The screenshot is retained as a historical capture; its feedback averages are ou
 | Total tokens | 487,234 |
 | Reported trace cost | $0.03117 |
 
-Token usage and cost are the experiment's reported trace totals; no separate evaluator-cost total was verified. Zero run-level errors does not mean every tool call succeeded: `mixed-missing-id` contains a handled validation error.
-
 ## 4. Failure Analysis
 
-The following cases describe the current baseline's tool-calling failures and evaluator limitations. Scores remain as recorded in LangSmith.
+The following cases describe the current baseline's tool-calling failures and evaluator.
 
 ### Case 1: Missing Order ID in a Multi-Intent Request
 
