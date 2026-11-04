@@ -6,9 +6,9 @@ This report evaluates an agentic e-commerce assistant built with LangGraph. The 
 
 - **Evaluation framework:** LangSmith
 - **Agent model:** GPT-5.4 Nano
-- **Validation dataset:** `val_dataset`
+- **Validation dataset:** `eval_dataset`
 - **Test cases:** 44 scenarios containing 48 conversation turns
-- **Experiment date:** October 29, 2026
+- **Experiment date:** November 5, 2026 (Istanbul, UTC+3)
 
 ## 2. Evaluation Methodology
 
@@ -40,30 +40,55 @@ Tool calls are matched without requiring an execution order. Each requested prod
 
 ## 3. Baseline Evaluation
 
-**Baseline experiment:** `Aisle_evaluation-90ea702a`  
-**Dataset:** `eval_dataset`
+**Baseline experiment:** [`Aisle_evaluation-ce40dfa9`](https://smith.langchain.com/o/33aacb44-f3ca-44af-a3f3-b7b78ec0982d/a/-/datasets/b438b59e-e867-4838-b901-d6ab7d7a6108/compare?selectedSessions=4b8a64d6-974c-4365-9d2e-fac690878518)
 
-This experiment establishes the baseline for future performance comparisons.
+**Experiment ID:** `4b8a64d6-974c-4365-9d2e-fac690878518`
 
-- **Start:** October 29, 2026
+**Dataset:** `eval_dataset` (`b438b59e-e867-4838-b901-d6ab7d7a6108`)
+
+This experiment establishes the baseline for future performance comparisons and is marked as the baseline in LangSmith.
+
+- **Start:** November 5, 2026, 01:26:38 (Istanbul, UTC+3)
+- **Dataset version:** `2026-11-04T22:26:38.123698+00:00`
+- **Code revision:** `e50a30c-dirty` (includes uncommitted changes)
+- **Repetitions:** 1 per scenario
 - **Completed runs:** 44/44
-- **Execution errors:** 0
-- **Feedback coverage:** 44 scores for each of the three metrics
+- **Run-level execution errors:** 0
+- **Feedback coverage:** 44 scores for each of the three metrics; 132 feedback records in total
+
+The following scores were calculated from all 44 runs, cross-checked against their individual feedback records, and verified against the live experiment summary. All 44 dataset examples have one completed run and all three evaluator scores; no feedback scores are missing and no evaluator errors are reported.
 
 | Metric | Passed | Average score |
 | --- | ---: | ---: |
-| Response Quality | 42/44 | 0.9545 |
-| Tool Arguments | 35/44 | 0.7955 |
-| Tool Usage | 40/44 | 0.9091 |
-| All three checks | 35/44 | 0.7955 |
+| Response Quality | 40/44 | 0.9091 |
+| Tool Arguments | 37/44 | 0.8409 |
+| Tool Usage | 42/44 | 0.9545 |
+| All three checks | 36/44 | 0.8182 |
 
-Nine scenarios failed at least one metric.
+Eight scenarios received at least one failing score. These are the recorded evaluator results; the response judge's false failure described below has not been manually corrected.
+
+**Dashboard verification:** the live experiment summary now includes all 44 scores per metric and agrees with the table above. The saved screenshot below shows earlier, incomplete aggregates: Response Quality **0.89**, Tool Arguments **0.83**, and Tool Usage **0.94**. Use the verified 44-case scores for future comparisons.
+
+![LangSmith baseline dashboard](eval_pics/baseline.png)
+
+The screenshot is retained as a historical capture; its feedback averages are outdated.
+
+| Runtime metric | LangSmith experiment summary |
+| --- | ---: |
+| P50 latency | 2.39 s |
+| P99 latency | 9.12 s |
+| Input tokens | 482,152 |
+| Output tokens | 5,082 |
+| Total tokens | 487,234 |
+| Reported trace cost | $0.03117 |
+
+Token usage and cost are the experiment's reported trace totals; no separate evaluator-cost total was verified. Zero run-level errors does not mean every tool call succeeded: `mixed-missing-id` contains a handled validation error.
 
 ## 4. Failure Analysis
 
-The following cases illustrate the main failures in tool calling, argument extraction, and response grading.
+The following cases describe the current baseline's tool-calling failures and evaluator limitations. Scores remain as recorded in LangSmith.
 
-### Case 1: Multi-Intent Request
+### Case 1: Missing Order ID in a Multi-Intent Request
 
 **Input:**
 
@@ -72,7 +97,7 @@ The following cases illustrate the main failures in tool calling, argument extra
 **Observed execution:**
 
 1. `search_products` received category `jackets`, color `blue`, and `max_price: 150`, plus default limit and sorting values.
-2. `order_status` received `order_id: null` and returned no order information.
+2. `order_status` received `order_id: 0` and failed validation because IDs must be greater than zero.
 3. The final response listed jackets and asked for the numeric order ID.
 
 | Metric | Baseline score |
@@ -81,17 +106,19 @@ The following cases illustrate the main failures in tool calling, argument extra
 | Tool Arguments | 0 |
 | Tool Usage | 0 |
 
-**Failure:** the agent attempted an order lookup without an order ID. The expected behavior was to search for jackets and ask for the ID. The extra lookup failed Tool Usage, which also failed Tool Arguments. Response Quality passed because the final answer showed jackets and requested the missing ID.
+**Failure:** the agent invented a placeholder order ID instead of waiting for the user to supply it. The expected behavior was to search for jackets and ask for the ID without an order lookup. The handled validation error failed Tool Usage and Tool Arguments. Response Quality passed because the final answer showed matching jackets and requested the missing ID.
 
-### Case 2: Brand Omission in a Multi-Tool Request
+### Case 2: Omitted Brand Filters
 
 **Input:**
 
-> Find purple Motion shoes under $0.01, then track order 1.
+> Find black Motion shoes in size 42 under $100.
 
-Both requested tools were called. However, the product call omitted `brand: Motion`. Scores were response quality **1**, tool arguments **0**, and tool usage **1**.
+In `product-combined-filters`, the product call omitted `brand: Motion` and added `min_price: 0`. The response recommended Lunar Court Sneakers from Urban Step. Scores were **0 / 0 / 1** for Response Quality / Tool Arguments / Tool Usage.
 
-**Failure:** the search did not include the requested brand. The default values `limit: 5` and `sort_by: relevance` were valid. The no-results answer passed Response Quality despite the incomplete search filters.
+The brand was also omitted in `mixed-all-tools`, `mixed-no-results`, and `product-no-matches`. `mixed-all-tools` returned other brands and failed Response Quality. The two no-results cases passed Response Quality despite the missing filter.
+
+**Failure:** explicit brand constraints were lost when extracting search arguments. In `product-no-matches` and `product-combined-filters`, the additional `min_price: 0` also violates the argument check, which rejects non-null filters absent from the reference. This strictness is separate from the genuine brand omission.
 
 ### Case 3: Brand Extraction Across Turns
 
@@ -100,34 +127,48 @@ Both requested tools were called. However, the product call omitted `brand: Moti
 > Find black shoes under $100.  
 > Only Motion, in size 42.5, please.
 
-The second search preserved the other filters but extracted the brand as `Only Motion`, rather than `Motion`. Tool arguments scored **0**, while tool usage and response quality scored **1**.
+In `memory-product-refinement`, the second search preserved the other filters but extracted the brand as `Only Motion`, rather than `Motion`. Tool Arguments scored **0**, while Tool Usage and Response Quality scored **1**.
 
-**Failure:** the agent included the word “Only” in the brand value. The response judge accepted the resulting no-match answer despite the incorrect argument.
+**Failure:** the agent included the word “Only” in the brand value. The response judge accepted the resulting no-match answer and treated “Only Motion” as the requested brand, overlooking the reference's `Motion` constraint.
 
-### Case 4: Provided Order ID Treated as Missing
+### Case 4: Policy Request Dropped After an Unsupported Action
 
-For `Track order 1.`, the agent asked for the numeric order ID instead of looking it up. The standalone case failed all metrics. The first turn of `memory-order-correction` showed the same behavior, but its response judge incorrectly accepted it as asking for a missing ID.
+**Input:**
 
-**Failure:** the agent did not use an order ID already present in the request. In comparison, `memory-order-id` successfully looked up order 1 when the ID was supplied in a follow-up.
+> Cancel order 1, and then tell me your return policy.
 
-### Case 5: Evaluator Strictness and False Passes
+In `mixed-unsupported`, the agent correctly declined cancellation but called no tools. It asked for an item type instead of retrieving the general return policy and also requested an order ID already present in the input. All three metrics scored **0**.
 
-`mixed-unsupported` made an additional read-only order lookup before declining cancellation and answering the return-policy question. Its tool metrics failed because the reference required only `faq_search`; response quality passed. The failure reflects an extra lookup under the tool-count check; the agent did not perform a cancellation.
+**Failure:** declining the unsupported action prevented completion of the separate, supported policy request. The expected tool call was `faq_search`.
 
-In `mixed-all-tools`, the judge accepted a response listing other brands despite the explicit request for Motion products. This is a response-quality false pass supported by the returned product brands. The deterministic argument check correctly failed the omitted brand.
+### Case 5: Response-Judge Errors and Tool Ordering
+
+In `product-expensive-first`, the agent requested four watches with `sort_by: price_high_to_low`. The tool returned prices in the order **174.49, 169.99, 158.49, 161.49**, but the final response correctly reordered them to **174.49, 169.99, 161.49, 158.49**.
+
+The judge nevertheless failed Response Quality, claiming that 161.49 appeared after 158.49 in the response. This is a **false failure**: the comment describes the tool-result order rather than the final answer. Both tool metrics passed. The score remains **0 / 1 / 1** in the baseline; the tool's ordering issue and the judge's error should be investigated separately.
+
+In `product-no-matches`, the judge's passing comment incorrectly claimed that the search used `brand: Motion`, although the captured call omitted it. The no-results searches returned empty results even with broader filters, so a quality pass alone does not establish that all requested arguments were applied. Deterministic argument checks remain necessary alongside response grading.
 
 ### All Scenarios With a Failed Metric
 
 Scores are **Response Quality / Tool Arguments / Tool Usage**.
 
-| Case | Scores | Observed failure |
+| Case (linked to evaluated run) | Scores | Observed failure |
 | --- | --- | --- |
-| `product-combined-filters` | 0 / 0 / 1 | Motion brand omitted; another brand recommended. |
-| `product-no-matches` | 1 / 0 / 1 | Motion brand omitted from the product call. |
-| `order-shipped` | 0 / 0 / 0 | No lookup despite supplied order ID 1. |
-| `mixed-all-tools` | 1 / 0 / 1 | All three tools used; Motion brand omitted. |
-| `mixed-missing-id` | 1 / 0 / 0 | Extra order lookup with a null ID. |
-| `mixed-no-results` | 1 / 0 / 1 | Both tools used; Motion brand omitted. |
-| `mixed-unsupported` | 1 / 0 / 0 | Extra read-only order lookup. |
-| `memory-product-refinement` | 1 / 0 / 1 | Brand extracted as Only Motion. |
-| `memory-order-correction` | 1 / 0 / 0 | No lookup in first turn; corrected ID used in second. |
+| [`product-combined-filters`](https://smith.langchain.com/o/33aacb44-f3ca-44af-a3f3-b7b78ec0982d/projects/p/4b8a64d6-974c-4365-9d2e-fac690878518/r/01a1a8ac-4a7b-72d2-bba5-0215f8a2938b) | 0 / 0 / 1 | Motion brand omitted; extra minimum-price filter; Urban Step product recommended. |
+| [`product-no-matches`](https://smith.langchain.com/o/33aacb44-f3ca-44af-a3f3-b7b78ec0982d/projects/p/4b8a64d6-974c-4365-9d2e-fac690878518/r/01a1a8ac-b771-7c40-969c-ca006f51b584) | 1 / 0 / 1 | Motion brand omitted; extra minimum-price filter; judge incorrectly claimed the brand was applied. |
+| [`product-expensive-first`](https://smith.langchain.com/o/33aacb44-f3ca-44af-a3f3-b7b78ec0982d/projects/p/4b8a64d6-974c-4365-9d2e-fac690878518/r/01a1a8ac-84b0-7bf1-9d08-50f8b5b5f95a) | 0 / 1 / 1 | Judge falsely failed a correctly sorted final answer; tool results were unsorted. |
+| [`mixed-all-tools`](https://smith.langchain.com/o/33aacb44-f3ca-44af-a3f3-b7b78ec0982d/projects/p/4b8a64d6-974c-4365-9d2e-fac690878518/r/01a1a8ad-7982-75e0-a7ec-cc1104c68c5c) | 0 / 0 / 1 | All three tools used; Motion brand omitted and other brands presented as matches. |
+| [`mixed-missing-id`](https://smith.langchain.com/o/33aacb44-f3ca-44af-a3f3-b7b78ec0982d/projects/p/4b8a64d6-974c-4365-9d2e-fac690878518/r/01a1a8ad-890c-7f20-b56f-98b0317b0163) | 1 / 0 / 0 | Invented order ID 0 caused a handled validation error. |
+| [`mixed-no-results`](https://smith.langchain.com/o/33aacb44-f3ca-44af-a3f3-b7b78ec0982d/projects/p/4b8a64d6-974c-4365-9d2e-fac690878518/r/01a1a8ad-9530-77d2-87fc-751e3713b4e5) | 1 / 0 / 1 | Both tools used; Motion brand omitted. |
+| [`mixed-unsupported`](https://smith.langchain.com/o/33aacb44-f3ca-44af-a3f3-b7b78ec0982d/projects/p/4b8a64d6-974c-4365-9d2e-fac690878518/r/01a1a8ad-a189-7901-97c0-13146c58f416) | 0 / 0 / 0 | No FAQ lookup; return-policy request left unanswered. |
+| [`memory-product-refinement`](https://smith.langchain.com/o/33aacb44-f3ca-44af-a3f3-b7b78ec0982d/projects/p/4b8a64d6-974c-4365-9d2e-fac690878518/r/01a1a8ad-a63f-75a2-a01a-6f76825c6b5f) | 1 / 0 / 1 | Brand extracted as Only Motion. |
+
+For comparison within this experiment, `order-shipped`, `memory-order-id`, and `memory-order-correction` passed all three metrics. The missing-ID lookup failure is therefore distinct from handling an explicitly supplied or corrected order ID.
+
+### Priorities for the Next Experiment
+
+1. Preserve brand constraints exactly, including refinements such as “Only Motion,” and rerun the four brand-omission cases plus `memory-product-refinement`.
+2. Avoid calling `order_status` until a valid ID is available, and complete supported requests alongside unsupported ones. Rerun `mixed-missing-id` and `mixed-unsupported`.
+3. Check product sorting separately from final-answer sorting, and validate the judge against `product-expensive-first` before trusting response-quality changes.
+4. Review redundant filters such as `min_price: 0` under the strict argument evaluator. Keep the recorded baseline scores unchanged; any evaluator revision should be identified explicitly in future comparisons.
