@@ -123,14 +123,11 @@ def get_faq_embeddings():
 @tool (args_schema=QuestionsFilter)
 def faq_search(question:str|None = None,runtime: ToolRuntime = None,):
     """
-    Retrieve the current status and available tracking details of an order.
+    Search store FAQs for policies and general store information.
 
-    Use when the customer asks about an existing order's status,
-    shipment, or delivery progress. Ask for any missing required
-    order identifiers before calling this tool.
-
-    This tool only retrieves information; it does not modify,
-    cancel, or refund orders.
+    Use for questions about shipping, returns, refunds, payments,
+    exchanges, and other store policies. No order ID is required.
+    For the status or tracking details of a specific order, use order_status.
     """
 
     message = next(

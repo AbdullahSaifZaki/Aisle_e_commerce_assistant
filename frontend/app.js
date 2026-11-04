@@ -573,7 +573,7 @@ export function startChat({ config, auth, user, onAuthenticationRequired }) {
   function sendMessage(event) {
     event?.preventDefault();
     const text = input.value.trim();
-    if (!text || text.length > 3000 || (current && (pending.has(current.id) || failures.has(current.id)))) return;
+    if (!text || text.length > input.maxLength || (current && (pending.has(current.id) || failures.has(current.id)))) return;
     if (!current) {
       current = { id: crypto.randomUUID(), title: text.length > 60 ? text.slice(0, 60) + "…" : text, updatedAt: Date.now(), messages: [] };
       state.conversations.unshift(current);

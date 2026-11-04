@@ -120,6 +120,42 @@ test('logout invokes Auth0 logout without a login page', async t => {
   assert.equal(find('#auth-fallback'), null);
 });
 
+test('composer rejects messages above the API limit without saving a failed conversation', async t => {
+  const { Client, find, dom } = setup(t, { isAuthenticated: async () => true });
+  const originalFetch = globalThis.fetch;
+  t.after(() => { globalThis.fetch = originalFetch; });
+  let requests = 0;
+  globalThis.fetch = async () => {
+    requests++;
+    return new Response(JSON.stringify({ response: 'ok', thread_id: 'thread' }));
+  };
+  await mountAuth({ config, Client, startChat });
+  // Programmatic values can exceed the textarea's native maxlength.
+  find('textarea').value = 'x'.repeat(2001);
+  find('.composer').dispatchEvent(new dom.window.Event('submit', { cancelable: true }));
+  await settle();
+  assert.equal(requests, 0);
+  assert.equal(find('.message.user'), null);
+  assert.equal(find('textarea').maxLength, 2000);
+});
+
+test('composer can send a message at the API limit', async t => {
+  const { Client, find, dom } = setup(t, { isAuthenticated: async () => true });
+  const originalFetch = globalThis.fetch;
+  t.after(() => { globalThis.fetch = originalFetch; });
+  let sentMessage;
+  globalThis.fetch = async (url, options) => {
+    sentMessage = JSON.parse(options.body).message;
+    return new Response(JSON.stringify({ response: 'ok', thread_id: 'thread' }));
+  };
+  await mountAuth({ config, Client, startChat });
+  find('textarea').value = 'x'.repeat(2000);
+  find('.composer').dispatchEvent(new dom.window.Event('submit', { cancelable: true }));
+  await settle();
+  assert.equal(sentMessage.length, 2000);
+  assert.equal(find('.message.assistant p').textContent, 'ok');
+});
+
 test('expired session redirects to Universal Login and keeps the unanswered message', async t => {
   let called = 0;
   const { Client, find, dom } = setup(t, {

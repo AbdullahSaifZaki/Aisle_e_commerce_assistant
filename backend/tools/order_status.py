@@ -7,26 +7,23 @@ from sqlalchemy import text
 from langchain.tools import tool
 
 class OrdersIdExtractor(BaseModel):
-    order_id:int|None = Field(
-        default=None,
+    order_id:int= Field(
+        gt=0,
         description=(
             "The unique order ID explicitly mentioned by the user. "
             "Extract only the numeric identifier that refers to an order. "
             "Do not guess or infer an order ID. "
-            "Return None if the user does not provide an order ID."
+            "Do not call this tool if no order ID is available."
         )
     )
 
-def order_search(order_id:int|None):
+def order_search(order_id:int):
     query = """
     SELECT  status, total_price, created_at, shipped_at, delivered_at, tracking_number, carrier
     FROM orders
     WHERE order_id = :order_id
     LIMIT 1
     """
-
-    if order_id is None :
-        return []
 
     with engine.connect() as conn:
         result = conn.execute(
